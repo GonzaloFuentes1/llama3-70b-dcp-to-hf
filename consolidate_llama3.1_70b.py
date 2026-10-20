@@ -337,8 +337,10 @@ def convert_checkpoint(base_path, output_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_path", type=str, default="/workspace1/pre-training-latamgpt/model-checkpoints/cpt-llama370b-fp8-fl-arrow-pack-14-14fsdp-tp8-bs3/step_52000")
-    parser.add_argument("--output_path", type=str, default="/workspace1/gonzalo.fuentes/checkpoint_converter/converted_llama3_final")
+    parser.add_argument("--input_path", type=str, required=True,
+                        help="Directory containing the DCP checkpoint (the tp* shard directories).")
+    parser.add_argument("--output_path", type=str, required=True,
+                        help="Directory where the Hugging Face model will be written.")
     
     args = parser.parse_args()
     convert_checkpoint(args.input_path, args.output_path)

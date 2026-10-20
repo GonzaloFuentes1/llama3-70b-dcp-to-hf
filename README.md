@@ -62,7 +62,7 @@ Output:
 
 - `config.json` written from the configuration hardcoded in the script.
 - Sharded `model-*-of-*.safetensors` files (maximum 10GB each) and `model.safetensors.index.json`, written by `save_pretrained`.
-- If `save_pretrained` raises, the script prints the error and falls back to a single `model.safetensors` containing the converted tensors.
+- If building, loading or saving the model raises (for example a shape mismatch in `load_state_dict`), the script prints the error and falls back to a single `model.safetensors` containing the converted tensors.
 
 The tokenizer is not converted or copied. Copy the tokenizer files from the matching Llama 3 / 3.1 release into the output directory before loading the model with `AutoTokenizer`.
 
@@ -83,8 +83,8 @@ graph TD
     B --> C[Map FQN to file, offset, length]
     C --> D[Read bytes at offset, torch.load from memory]
     D --> E[Concatenate chunks within each TP rank]
-    E --> F[Reassemble TP ranks]
-    F --> G[Split fused QKV and gate/up]
+    E --> F[Split fused QKV and gate/up per rank]
+    F --> G[Reassemble TP ranks]
     G --> H[Rename to Hugging Face keys, cast to bf16]
     H --> I[save_pretrained to safetensors]
 ```
@@ -137,7 +137,7 @@ The script writes `config.json`, builds a `LlamaForCausalLM` from the hardcoded 
 
 ## Limitations
 
-- Hardcoded to Llama 3 70B and TP=8. The 80 layers, the QKV split sizes (`1024/128/128`) and the gate/up split sizes (`3584/3584`) are constants in the script. A different TP degree or model size needs code changes. If a QKV slice has an unexpected shape the layer is recorded as missing, but a gate/up shape mismatch raises and stops the run.
+- Hardcoded to Llama 3 70B and TP=8. The 80 layers, the QKV split sizes (`1024/128/128`) and the gate/up split sizes (`3584/3584`) are constants in the script. A different TP degree or model size needs code changes. If a QKV slice has an unexpected shape, the layer is added to the missing list and the remaining ranks are skipped, but Q, K and V are still built from the ranks processed before it, so they come out too small (or are not written at all if the first rank fails). A gate/up shape mismatch raises and stops the run.
 - The Hugging Face config is hardcoded as well: `max_position_embeddings=8192`, `rope_theta=500000.0`, no `rope_scaling`, untied embeddings. It does not include the extended-context RoPE scaling that the Llama 3.1 release defines. Edit `LLAMA3_70B_CONFIG` or the written `config.json` if your model needs different values.
 - All weights are cast to bf16, whatever dtype they had in the checkpoint.
 - Only the tensors listed in the name mapping are read. Any other entries in the checkpoint (extra state, optimizer state) are ignored.
